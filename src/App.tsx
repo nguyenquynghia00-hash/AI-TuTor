@@ -3,12 +3,14 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Send, Bot, User, Menu, X, Moon, Sun, 
   BookOpen, Calculator, Languages, Zap, FlaskConical, Dna,
-  Landmark, Globe, Monitor, Cpu, Users,
-  Sparkles, History, ChevronRight, ArrowLeft, Lightbulb, Trophy, ArrowDown, LogOut, Edit3
+  Landmark, Globe, Monitor, Cpu, Settings, LayoutDashboard, Users, Gamepad2,
+  Sparkles, History, ChevronRight, ArrowLeft, Lightbulb, Trophy, ArrowDown, LogOut, Edit3,
+  Timer, Brain, Puzzle, Calculator as CalcIcon, CheckCircle2, XCircle, Flame, Play, RotateCcw, Lock
 } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import confetti from 'canvas-confetti';
 import { auth } from './firebase';
 import { 
   signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User as FirebaseUser,
@@ -22,6 +24,7 @@ type Message = {
 };
 
 type UserProfile = {
+  uid: string;
   displayName: string;
   username: string;
   avatar: string;
@@ -39,6 +42,77 @@ type Subject = {
   desc: string;
 };
 
+type Game = {
+  id: string;
+  name: string;
+  description: string;
+  icon: React.ElementType;
+  color: string;
+  bgColor: string;
+};
+
+type GameQuestion = {
+  id: string;
+  question: string;
+  options?: string[];
+  answer: string;
+  explanation?: string;
+  type?: 'multiple' | 'text' | 'match';
+  pairs?: { left: string; right: string }[];
+};
+
+type GameHistory = {
+  id: string;
+  gameId: string;
+  score: number;
+  date: string;
+  subject: string;
+};
+
+type GeneralRank = 'C' | 'B' | 'A' | 'S' | 'S+' | 'SSS';
+
+type General = {
+  id: string;
+  name: string;
+  country: string;
+  era: string;
+  origin: string;
+  achievements: string;
+  image: string;
+};
+
+type UserCard = {
+  id: string;
+  generalId: string;
+  rank: GeneralRank;
+  dateAcquired: string;
+};
+
+const GENERALS: General[] = [
+  { id: 'tran-hung-dao', name: 'Trần Hưng Đạo', country: 'Việt Nam', era: 'Nhà Trần', origin: 'Hoàng tộc nhà Trần', achievements: '3 lần đánh bại quân Nguyên Mông', image: 'https://picsum.photos/seed/tranhungdao/400/600' },
+  { id: 'quang-trung', name: 'Quang Trung', country: 'Việt Nam', era: 'Nhà Tây Sơn', origin: 'Nông dân khởi nghĩa', achievements: 'Đánh bại quân Thanh, thống nhất đất nước', image: 'https://picsum.photos/seed/quangtrung/400/600' },
+  { id: 'napoleon', name: 'Napoleon', country: 'Pháp', era: 'Đế chế Pháp', origin: 'Quý tộc nhỏ', achievements: 'Chinh phục phần lớn châu Âu', image: 'https://picsum.photos/seed/napoleon/400/600' },
+  { id: 'thanh-cat-tu-han', name: 'Thành Cát Tư Hãn', country: 'Mông Cổ', era: 'Đế quốc Mông Cổ', origin: 'Thủ lĩnh bộ lạc', achievements: 'Lập nên đế quốc liền thổ lớn nhất lịch sử', image: 'https://picsum.photos/seed/genghis/400/600' },
+];
+
+const RANK_RATES = {
+  'C': 0.40,
+  'B': 0.25,
+  'A': 0.15,
+  'S': 0.10,
+  'S+': 0.07,
+  'SSS': 0.03
+};
+
+const RANK_COLORS: Record<GeneralRank, string> = {
+  'C': 'from-slate-400 to-slate-500 border-slate-400 text-slate-700',
+  'B': 'from-green-400 to-green-600 border-green-400 text-green-800',
+  'A': 'from-blue-400 to-blue-600 border-blue-400 text-blue-800',
+  'S': 'from-purple-400 to-purple-600 border-purple-400 text-purple-800 shadow-[0_0_15px_rgba(168,85,247,0.5)]',
+  'S+': 'from-pink-400 to-rose-600 border-pink-400 text-pink-900 shadow-[0_0_20px_rgba(236,72,153,0.6)]',
+  'SSS': 'from-yellow-300 via-amber-500 to-orange-600 border-yellow-400 text-yellow-900 shadow-[0_0_30px_rgba(245,158,11,0.8)]'
+};
+
 const SUBJECTS: Subject[] = [
   { id: 'math', name: 'Toán học', icon: Calculator, color: 'text-blue-500', bg: 'bg-blue-100 dark:bg-blue-500/20', border: 'border-blue-200 dark:border-blue-500/30', desc: 'Giải bài từng bước, hiển thị công thức' },
   { id: 'literature', name: 'Ngữ văn', icon: BookOpen, color: 'text-purple-500', bg: 'bg-purple-100 dark:bg-purple-500/20', border: 'border-purple-200 dark:border-purple-500/30', desc: 'Gợi ý dàn ý, phân tích tác phẩm' },
@@ -53,10 +127,28 @@ const SUBJECTS: Subject[] = [
   { id: 'civic', name: 'GDCD', icon: Users, color: 'text-teal-500', bg: 'bg-teal-100 dark:bg-teal-500/20', border: 'border-teal-200 dark:border-teal-500/30', desc: 'Tình huống pháp luật, đạo đức' },
 ];
 
+const GAMES: Game[] = [
+  { id: 'quiz', name: 'QUIZ NHANH', description: 'Câu hỏi trắc nghiệm kiến thức tổng hợp.', icon: Brain, color: 'text-blue-500', bgColor: 'bg-blue-100 dark:bg-blue-500/20' },
+  { id: 'race', name: 'ĐUA TOP KIẾN THỨC', description: 'Trả lời nhanh nhất có thể để ghi điểm.', icon: Timer, color: 'text-red-500', bgColor: 'bg-red-100 dark:bg-red-500/20' },
+  { id: 'match', name: 'GHÉP ĐÔI', description: 'Ghép từ vựng hoặc công thức với nghĩa đúng.', icon: Puzzle, color: 'text-green-500', bgColor: 'bg-green-100 dark:bg-green-500/20' },
+  { id: 'guess', name: 'ĐOÁN NHANH', description: 'AI đưa gợi ý, bạn đoán đáp án.', icon: Lightbulb, color: 'text-yellow-500', bgColor: 'bg-yellow-100 dark:bg-yellow-500/20' },
+  { id: 'math', name: 'TRÒ CHƠI TOÁN', description: 'Thử thách tính nhẩm siêu tốc.', icon: CalcIcon, color: 'text-purple-500', bgColor: 'bg-purple-100 dark:bg-purple-500/20' },
+];
+
 const getSystemInstruction = (subjectId: string | null) => {
-  let base = `Bạn là một chuyên gia giáo dục và gia sư AI thông minh tại "AI Learning Hub", hỗ trợ học sinh Việt Nam.
+  let base = `Bạn là một chuyên gia giáo dục và gia sư AI thông minh tại "AI Learning Hub", hỗ trợ học sinh Việt Nam (đặc biệt là cấp THCS).
 Nhiệm vụ của bạn là giải đáp thắc mắc, hướng dẫn học tập một cách dễ hiểu, cá nhân hóa theo trình độ học sinh.
-Luôn trình bày rõ ràng, sử dụng Markdown, chia nhỏ các bước, và dùng icon phù hợp.`;
+Luôn trình bày rõ ràng, sử dụng Markdown, chia nhỏ các bước, và dùng icon phù hợp.
+
+QUY TẮC QUAN TRỌNG VỀ TOÁN HỌC & CÔNG THỨC:
+- KHÔNG sử dụng ký hiệu LaTeX ($$, \, ^, _,...) hoặc viết công thức dạng code.
+- LUÔN viết toán bằng ký hiệu thông thường dễ hiểu như sách giáo khoa Việt Nam.
+- Nhân: dùng dấu "×" (không dùng *).
+- Chia: dùng dấu "÷" (không dùng /).
+- Bình phương: viết "²" (ví dụ: x²).
+- Căn bậc hai: viết "√" (ví dụ: √x).
+- Delta: viết "Δ".
+- Mỗi bước giải phải xuống dòng rõ ràng.`;
 
   let method = '';
   if (!subjectId || subjectId === 'general') {
@@ -68,8 +160,8 @@ Luôn trình bày rõ ràng, sử dụng Markdown, chia nhỏ các bước, và 
       case 'chemistry':
         method = `\n\nMôn học hiện tại: ${subjectId === 'math' ? 'Toán học' : subjectId === 'physics' ? 'Vật lý' : 'Hóa học'}.
 Phương pháp:
-- Giải bài tập từng bước chi tiết.
-- Hiển thị công thức rõ ràng bằng Markdown (sử dụng LaTeX nếu cần).
+- Giải bài tập từng bước chi tiết, dễ hiểu cho học sinh THCS.
+- Hiển thị công thức bằng ký hiệu thông thường (x², √, ×, ÷, Δ). Tuyệt đối không dùng LaTeX.
 - Giải thích lý do cho từng bước biến đổi.
 - Không chỉ đưa đáp án cuối cùng.`;
         break;
@@ -135,6 +227,10 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentSubject, setCurrentSubject] = useState<string | null>(null);
+  const [currentView, setCurrentView] = useState<'dashboard' | 'chat' | 'games' | 'collection'>('dashboard');
+  const [currentGame, setCurrentGame] = useState<string | null>(null);
+  const [gameHistory, setGameHistory] = useState<GameHistory[]>([]);
+  const [gameScores, setGameScores] = useState<Record<string, number>>({});
   const [chats, setChats] = useState<Record<string, Message[]>>({});
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -142,6 +238,13 @@ export default function App() {
   const [isScrolledUp, setIsScrolledUp] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  
+  // Gamification State
+  const [lastLoginDate, setLastLoginDate] = useState<string | null>(null);
+  const [streak, setStreak] = useState<number>(0);
+  const [cards, setCards] = useState<UserCard[]>([]);
+  const [showCardReveal, setShowCardReveal] = useState<{ general: General, rank: GeneralRank } | null>(null);
+  const [selectedCard, setSelectedCard] = useState<{ general: General, rank: GeneralRank } | null>(null);
   
   // Auth & Profile State
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -152,6 +255,7 @@ export default function App() {
   const [showProfile, setShowProfile] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>({
+    uid: '',
     displayName: '',
     username: '',
     avatar: 'https://ui-avatars.com/api/?name=User&background=random',
@@ -159,12 +263,14 @@ export default function App() {
     favoriteSubject: 'general'
   });
   const [editForm, setEditForm] = useState<UserProfile>({
+    uid: '',
     displayName: '',
     username: '',
     avatar: 'https://ui-avatars.com/api/?name=User&background=random',
     bio: '',
     favoriteSubject: 'general'
   });
+  
   const [editError, setEditError] = useState('');
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   
@@ -195,11 +301,17 @@ export default function App() {
           const parsed = JSON.parse(savedData);
           setChats(parsed.chats || {});
           setLearningStats(parsed.stats || {});
+          setGameHistory(parsed.gameHistory || []);
+          setGameScores(parsed.gameScores || {});
+          setLastLoginDate(parsed.lastLoginDate || null);
+          setStreak(parsed.streak || 0);
+          setCards(parsed.cards || []);
           
           if (parsed.profile) {
             setUserProfile(parsed.profile);
           } else {
             const initialProfile = {
+              uid: user.uid,
               displayName: user.displayName || 'Người dùng',
               username: user.email?.split('@')[0] || 'user' + Math.floor(Math.random() * 1000),
               avatar: user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName || 'User'}&background=random`,
@@ -214,7 +326,11 @@ export default function App() {
       } else {
         setChats({});
         setLearningStats({});
+        setLastLoginDate(null);
+        setStreak(0);
+        setCards([]);
         const initialProfile = {
+          uid: user.uid,
           displayName: user.displayName || 'Người dùng',
           username: user.email?.split('@')[0] || 'user' + Math.floor(Math.random() * 1000),
           avatar: user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName || 'User'}&background=random`,
@@ -232,10 +348,103 @@ export default function App() {
       localStorage.setItem(`ai_learning_hub_data_${user.uid}`, JSON.stringify({
         chats,
         stats: learningStats,
-        profile: userProfile
+        profile: userProfile,
+        gameHistory,
+        gameScores,
+        lastLoginDate,
+        streak,
+        cards
       }));
     }
-  }, [chats, learningStats, userProfile, user, isAuthReady]);
+  }, [chats, learningStats, userProfile, gameHistory, gameScores, lastLoginDate, streak, cards, user, isAuthReady]);
+
+  const handleCheckIn = () => {
+    const today = new Date().toISOString().split('T')[0];
+    if (lastLoginDate === today) {
+        showToast('Bạn đã điểm danh hôm nay rồi!', 'error');
+        return;
+    }
+
+    let newStreak = streak;
+    if (lastLoginDate) {
+      const lastDate = new Date(lastLoginDate);
+      const currentDate = new Date(today);
+      const diffTime = Math.abs(currentDate.getTime() - lastDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+      
+      if (diffDays === 1) {
+        newStreak += 1;
+      } else {
+        newStreak = 1;
+      }
+    } else {
+      newStreak = 1;
+    }
+
+    setStreak(newStreak);
+    setLastLoginDate(today);
+
+    // Determine rank
+    let rank: GeneralRank = 'C';
+    if (newStreak % 30 === 0) {
+      rank = 'SSS';
+    } else if (newStreak % 7 === 0) {
+      // S or above
+      const rand = Math.random();
+      if (rand < 0.5) rank = 'S';
+      else if (rand < 0.8) rank = 'S+';
+      else rank = 'SSS';
+    } else if (newStreak % 3 === 0) {
+      // A or above
+      const rand = Math.random();
+      if (rand < 0.6) rank = 'A';
+      else if (rand < 0.85) rank = 'S';
+      else if (rand < 0.95) rank = 'S+';
+      else rank = 'SSS';
+    } else {
+      // Normal pull
+      const rand = Math.random();
+      let cumulative = 0;
+      for (const [r, rate] of Object.entries(RANK_RATES)) {
+        cumulative += rate;
+        if (rand <= cumulative) {
+          rank = r as GeneralRank;
+          break;
+        }
+      }
+    }
+
+    const randomGeneral = GENERALS[Math.floor(Math.random() * GENERALS.length)];
+    
+    const newCard: UserCard = {
+      id: Date.now().toString(),
+      generalId: randomGeneral.id,
+      rank,
+      dateAcquired: new Date().toISOString()
+    };
+
+    setCards(prev => [...prev, newCard]);
+    setShowCardReveal({ general: randomGeneral, rank });
+    
+    if (rank === 'SSS') {
+      confetti({
+        particleCount: 150,
+        spread: 100,
+        origin: { y: 0.6 },
+        colors: ['#f59e0b', '#ef4444', '#8b5cf6']
+      });
+      if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200]);
+      }
+    } else if (rank === 'S+' || rank === 'S') {
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.6 },
+        colors: ['#3b82f6', '#8b5cf6']
+      });
+    }
+  };
 
   const handleUpdateProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -314,6 +523,7 @@ export default function App() {
       console.error(error);
       if (error.code === 'auth/email-already-in-use') setAuthError('Email đã được sử dụng');
       else if (error.code === 'auth/weak-password') setAuthError('Mật khẩu quá yếu (ít nhất 6 ký tự)');
+      else if (error.code === 'auth/operation-not-allowed') setAuthError('Đăng nhập bằng Email chưa được bật trong Firebase Console. Vui lòng bật nó trong phần Authentication > Sign-in method.');
       else setAuthError('Đăng ký thất bại. Vui lòng thử lại.');
     }
   };
@@ -331,6 +541,7 @@ export default function App() {
     } catch (error: any) {
       console.error(error);
       if (error.code === 'auth/invalid-credential') setAuthError('Email hoặc mật khẩu không đúng');
+      else if (error.code === 'auth/operation-not-allowed') setAuthError('Đăng nhập bằng Email chưa được bật trong Firebase Console. Vui lòng bật nó trong phần Authentication > Sign-in method.');
       else setAuthError('Đăng nhập thất bại. Vui lòng thử lại.');
     }
   };
@@ -340,9 +551,13 @@ export default function App() {
     try {
       await signInWithPopup(auth, provider);
       // Toast is handled by onAuthStateChanged
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login failed", error);
-      setAuthError('Đăng nhập Google thất bại.');
+      if (error.code === 'auth/operation-not-allowed') {
+        setAuthError('Đăng nhập bằng Google chưa được bật trong Firebase Console. Vui lòng bật nó trong phần Authentication > Sign-in method.');
+      } else {
+        setAuthError('Đăng nhập Google thất bại.');
+      }
     }
   };
 
@@ -602,7 +817,496 @@ export default function App() {
 
   const handleSubjectClick = (id: string | null) => {
     setCurrentSubject(id);
+    setCurrentView('chat');
     setSidebarOpen(false);
+  };
+
+  const generateGameQuestions = async (gameId: string, subjectId: string | null) => {
+    const subjectName = SUBJECTS.find(s => s.id === subjectId)?.name || 'kiến thức tổng hợp';
+    let prompt = '';
+    let schema: any = {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          id: { type: Type.STRING },
+          question: { type: Type.STRING },
+          answer: { type: Type.STRING },
+          explanation: { type: Type.STRING },
+        },
+        required: ['id', 'question', 'answer', 'explanation']
+      }
+    };
+
+    if (gameId === 'quiz' || gameId === 'race') {
+      prompt = `Tạo 5 câu hỏi trắc nghiệm về ${subjectName} cho học sinh THCS. Mỗi câu có 4 đáp án.`;
+      schema.items.properties.options = { type: Type.ARRAY, items: { type: Type.STRING } };
+      schema.items.required.push('options');
+    } else if (gameId === 'match') {
+      prompt = `Tạo 5 cặp ghép đôi về ${subjectName} (ví dụ: công thức - tên, từ vựng - nghĩa).`;
+      schema.items.properties.pairs = { 
+        type: Type.ARRAY, 
+        items: { 
+          type: Type.OBJECT, 
+          properties: { 
+            left: { type: Type.STRING }, 
+            right: { type: Type.STRING } 
+          } 
+        } 
+      };
+      schema.items.required.push('pairs');
+    } else if (gameId === 'guess') {
+      prompt = `Tạo 5 câu đố về ${subjectName}. AI đưa gợi ý, người chơi đoán 1 từ hoặc cụm từ ngắn.`;
+    } else if (gameId === 'math') {
+      prompt = `Tạo 10 phép tính toán học nhanh (cộng, trừ, nhân, chia) mức độ THCS.`;
+      schema.items.properties.options = { type: Type.ARRAY, items: { type: Type.STRING } };
+      schema.items.required.push('options');
+    }
+
+    try {
+      const response = await aiRef.current.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: schema
+        }
+      });
+      return JSON.parse(response.text);
+    } catch (e) {
+      console.error("Failed to generate questions", e);
+      return [];
+    }
+  };
+
+  const GameSession = ({ gameId, onExit }: { gameId: string, onExit: () => void }) => {
+    const [questions, setQuestions] = useState<GameQuestion[]>([]);
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [score, setScore] = useState(0);
+    const [gameState, setGameState] = useState<'loading' | 'playing' | 'finished'>('loading');
+    const [timeLeft, setTimeLeft] = useState(gameId === 'race' ? 30 : 0);
+    const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null);
+    const [selectedOption, setSelectedOption] = useState<string | null>(null);
+    const [userAnswer, setUserAnswer] = useState('');
+    const [combo, setCombo] = useState(0);
+    const [showExplanation, setShowExplanation] = useState(false);
+    const [matchedPairs, setMatchedPairs] = useState<string[]>([]);
+    const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
+    const [shuffledRights, setShuffledRights] = useState<any[]>([]);
+
+    useEffect(() => {
+      if (questions[currentIndex]?.pairs) {
+        setShuffledRights([...questions[currentIndex].pairs].sort(() => Math.random() - 0.5));
+      }
+    }, [currentIndex, questions]);
+
+    const handleMatch = (left: string, right: string) => {
+      const currentQ = questions[currentIndex];
+      const pair = currentQ.pairs?.find(p => p.left === left && p.right === right);
+      
+      if (pair) {
+        setMatchedPairs([...matchedPairs, left]);
+        setScore(score + 5);
+        if (matchedPairs.length + 1 === currentQ.pairs?.length) {
+          setFeedback('correct');
+          setCombo(combo + 1);
+          setTimeout(() => {
+            setFeedback(null);
+            setMatchedPairs([]);
+            setSelectedLeft(null);
+            if (currentIndex < questions.length - 1) {
+              setCurrentIndex(currentIndex + 1);
+            } else {
+              handleFinish();
+            }
+          }, 1000);
+        }
+      } else {
+        setFeedback('wrong');
+        setCombo(0);
+        setTimeout(() => setFeedback(null), 1000);
+      }
+    };
+
+    useEffect(() => {
+      const load = async () => {
+        const q = await generateGameQuestions(gameId, currentSubject);
+        if (q.length > 0) {
+          setQuestions(q);
+          setGameState('playing');
+        } else {
+          onExit();
+          showToast('Không thể tải câu hỏi, vui lòng thử lại sau.', 'error');
+        }
+      };
+      load();
+    }, []);
+
+    useEffect(() => {
+      if (gameState === 'playing' && gameId === 'race' && timeLeft > 0) {
+        const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+        return () => clearTimeout(timer);
+      } else if (gameState === 'playing' && gameId === 'race' && timeLeft === 0) {
+        handleFinish();
+      }
+    }, [timeLeft, gameState]);
+
+    const handleAnswer = (answer: string) => {
+      if (feedback) return;
+
+      const currentQ = questions[currentIndex];
+      const isCorrect = answer.toLowerCase().trim() === currentQ.answer.toLowerCase().trim();
+
+      if (isCorrect) {
+        setFeedback('correct');
+        const points = gameId === 'race' ? Math.max(5, 10 + Math.floor(timeLeft / 2)) : 10;
+        setScore(score + points);
+        setCombo(combo + 1);
+        setTimeout(() => {
+          setFeedback(null);
+          setSelectedOption(null);
+          setUserAnswer('');
+          if (currentIndex < questions.length - 1) {
+            setCurrentIndex(currentIndex + 1);
+          } else {
+            handleFinish();
+          }
+        }, 1000);
+      } else {
+        setFeedback('wrong');
+        setCombo(0);
+        setShowExplanation(true);
+      }
+    };
+
+    const handleFinish = () => {
+      setGameState('finished');
+      const newHistory: GameHistory = {
+        id: Date.now().toString(),
+        gameId,
+        score,
+        date: new Date().toISOString(),
+        subject: currentSubject || 'general'
+      };
+      setGameHistory(prev => [newHistory, ...prev]);
+      if (score > (gameScores[gameId] || 0)) {
+        setGameScores(prev => ({ ...prev, [gameId]: score }));
+      }
+    };
+
+    if (gameState === 'loading') {
+      return (
+        <div className="flex flex-col items-center justify-center h-[60vh]">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-slate-600 dark:text-slate-400 font-medium animate-pulse">AI đang chuẩn bị câu hỏi cho bạn...</p>
+        </div>
+      );
+    }
+
+    if (gameState === 'finished') {
+      return (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-md mx-auto mt-12 glass-panel p-8 rounded-3xl text-center border border-white/40 dark:border-slate-700/50 shadow-2xl"
+        >
+          <div className="w-20 h-20 bg-yellow-100 dark:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+            <Trophy size={40} />
+          </div>
+          <h2 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">Hoàn thành!</h2>
+          <p className="text-slate-600 dark:text-slate-400 mb-8">Bạn đã xuất sắc vượt qua thử thách này.</p>
+          
+          <div className="grid grid-cols-2 gap-4 mb-8">
+            <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20">
+              <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest block mb-1">Điểm số</span>
+              <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">{score} XP</span>
+            </div>
+            <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-500/10 border border-purple-100 dark:border-purple-500/20">
+              <span className="text-[10px] font-bold text-purple-500 uppercase tracking-widest block mb-1">Combo cao nhất</span>
+              <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">{combo}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => {
+                setGameState('loading');
+                setCurrentIndex(0);
+                setScore(0);
+                setTimeLeft(gameId === 'race' ? 30 : 0);
+                setCombo(0);
+                const reload = async () => {
+                  const q = await generateGameQuestions(gameId, currentSubject);
+                  setQuestions(q);
+                  setGameState('playing');
+                };
+                reload();
+              }}
+              className="w-full py-3.5 rounded-xl bg-blue-600 text-white font-bold shadow-lg shadow-blue-500/25 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+            >
+              <RotateCcw size={18} />
+              Chơi lại
+            </button>
+            <button
+              onClick={onExit}
+              className="w-full py-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+            >
+              Thoát
+            </button>
+          </div>
+        </motion.div>
+      );
+    }
+
+    const currentQ = questions[currentIndex];
+
+    return (
+      <div className="max-w-3xl mx-auto mt-4 md:mt-8 p-4">
+        <div className="flex items-center justify-between mb-8">
+          <button onClick={onExit} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-500">
+            <ArrowLeft size={20} />
+          </button>
+          
+          <div className="flex items-center gap-4">
+            {gameId === 'race' && (
+              <div className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold ${timeLeft < 10 ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
+                <Timer size={18} />
+                {timeLeft}s
+              </div>
+            )}
+            <div className="px-4 py-2 rounded-full bg-blue-600 text-white font-bold shadow-md">
+              {score} XP
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-8">
+          <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+            <span>Câu hỏi {currentIndex + 1}/{questions.length}</span>
+            {combo > 1 && <span className="text-orange-500 flex items-center gap-1"><Flame size={14} /> Combo x{combo}</span>}
+          </div>
+          <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+            <motion.div 
+              className="h-full bg-gradient-to-r from-blue-500 to-purple-600"
+              initial={{ width: 0 }}
+              animate={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentIndex}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className={`glass-panel p-8 rounded-3xl border-2 transition-all duration-300 ${
+              feedback === 'correct' ? 'border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 
+              feedback === 'wrong' ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)] animate-shake' : 
+              'border-white/40 dark:border-slate-700/50'
+            }`}
+          >
+            <h3 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-white mb-8 leading-relaxed">
+              {currentQ.question}
+            </h3>
+
+            {currentQ.options ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {currentQ.options.map((opt, i) => (
+                  <button
+                    key={i}
+                    disabled={!!feedback}
+                    onClick={() => {
+                      setSelectedOption(opt);
+                      handleAnswer(opt);
+                    }}
+                    className={`p-4 rounded-2xl text-left font-medium transition-all border-2 flex items-center justify-between group ${
+                      selectedOption === opt ? (
+                        feedback === 'correct' ? 'bg-green-50 border-green-500 text-green-700 dark:bg-green-500/10 dark:text-green-400' :
+                        feedback === 'wrong' ? 'bg-red-50 border-red-500 text-red-700 dark:bg-red-500/10 dark:text-red-400' :
+                        'bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400'
+                      ) : (
+                        feedback === 'wrong' && opt === currentQ.answer ? 'bg-green-50 border-green-500 text-green-700 dark:bg-green-500/10 dark:text-green-400' :
+                        'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500/50 text-slate-700 dark:text-slate-300'
+                      )
+                    }`}
+                  >
+                    <span>{opt}</span>
+                    {selectedOption === opt && feedback === 'correct' && <CheckCircle2 size={20} />}
+                    {selectedOption === opt && feedback === 'wrong' && <XCircle size={20} />}
+                  </button>
+                ))}
+              </div>
+            ) : currentQ.pairs ? (
+              <div className="grid grid-cols-2 gap-8">
+                <div className="space-y-3">
+                  {currentQ.pairs.map((p, i) => (
+                    <button
+                      key={`left-${i}`}
+                      disabled={matchedPairs.includes(p.left)}
+                      onClick={() => setSelectedLeft(p.left)}
+                      className={`w-full p-4 rounded-xl border-2 text-sm font-medium transition-all ${
+                        matchedPairs.includes(p.left) ? 'bg-green-50 border-green-200 text-green-400 dark:bg-green-500/5 dark:border-green-500/20' :
+                        selectedLeft === p.left ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10 text-blue-600' :
+                        'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-300'
+                      }`}
+                    >
+                      {p.left}
+                    </button>
+                  ))}
+                </div>
+                <div className="space-y-3">
+                  {shuffledRights.map((p, i) => (
+                    <button
+                      key={`right-${i}`}
+                      disabled={!selectedLeft || matchedPairs.some(mp => currentQ.pairs?.find(pair => pair.left === mp)?.right === p.right)}
+                      onClick={() => handleMatch(selectedLeft!, p.right)}
+                      className={`w-full p-4 rounded-xl border-2 text-sm font-medium transition-all ${
+                        matchedPairs.some(mp => currentQ.pairs?.find(pair => pair.left === mp)?.right === p.right) ? 'bg-green-50 border-green-200 text-green-400 dark:bg-green-500/5 dark:border-green-500/20' :
+                        'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-300'
+                      }`}
+                    >
+                      {p.right}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  value={userAnswer}
+                  onChange={(e) => setUserAnswer(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAnswer(userAnswer)}
+                  placeholder="Nhập câu trả lời của bạn..."
+                  disabled={!!feedback}
+                  className="w-full px-6 py-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 focus:outline-none focus:border-blue-500 transition-all text-lg"
+                />
+                <button
+                  onClick={() => handleAnswer(userAnswer)}
+                  disabled={!!feedback || !userAnswer.trim()}
+                  className="w-full py-4 rounded-2xl bg-blue-600 text-white font-bold shadow-lg hover:bg-blue-700 transition-all disabled:opacity-50"
+                >
+                  Gửi câu trả lời
+                </button>
+              </div>
+            )}
+
+            <AnimatePresence>
+              {showExplanation && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  className="mt-8 p-6 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700"
+                >
+                  <div className="flex items-center gap-2 text-blue-500 font-bold text-sm mb-2 uppercase tracking-wider">
+                    <Lightbulb size={16} />
+                    Giải thích từ AI
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed">
+                    {currentQ.explanation}
+                  </p>
+                  <button
+                    onClick={() => {
+                      setShowExplanation(false);
+                      setFeedback(null);
+                      setSelectedOption(null);
+                      setUserAnswer('');
+                      if (currentIndex < questions.length - 1) {
+                        setCurrentIndex(currentIndex + 1);
+                      } else {
+                        handleFinish();
+                      }
+                    }}
+                    className="mt-4 px-6 py-2 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition-all"
+                  >
+                    Tiếp tục
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    );
+  };
+
+  const GamesView = () => {
+    return (
+      <div className="p-4 md:p-8 max-w-6xl mx-auto">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-slate-800 dark:text-white mb-2 flex items-center gap-3">
+            <Gamepad2 className="text-blue-500" size={32} />
+            Trò chơi học tập
+          </h2>
+          <p className="text-slate-600 dark:text-slate-400">Vừa học vừa chơi, tích lũy XP và nâng cao kiến thức mỗi ngày!</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {GAMES.map((game) => {
+            const Icon = game.icon;
+            const highScore = gameScores[game.id] || 0;
+            return (
+              <motion.div
+                key={game.id}
+                whileHover={{ y: -5, scale: 1.02 }}
+                className="glass-panel p-6 rounded-3xl border border-white/40 dark:border-slate-700/50 flex flex-col h-full group"
+              >
+                <div className={`w-14 h-14 rounded-2xl ${game.bgColor} ${game.color} flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform`}>
+                  <Icon size={28} />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2 uppercase tracking-tight">{game.name}</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400 mb-6 flex-1">{game.description}</p>
+                
+                <div className="flex items-center justify-between mt-auto">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Điểm cao nhất</span>
+                    <span className="text-lg font-bold text-blue-600 dark:text-blue-400">{highScore}</span>
+                  </div>
+                  <button
+                    onClick={() => setCurrentGame(game.id)}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold text-sm shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all"
+                  >
+                    Chơi ngay
+                  </button>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        {gameHistory.length > 0 && (
+          <div className="mt-12">
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
+              <History size={20} className="text-slate-400" />
+              Lịch sử chơi
+            </h3>
+            <div className="glass-panel rounded-2xl overflow-hidden border border-white/40 dark:border-slate-700/50">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+                  <tr>
+                    <th className="px-6 py-4 font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Trò chơi</th>
+                    <th className="px-6 py-4 font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Môn học</th>
+                    <th className="px-6 py-4 font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Điểm</th>
+                    <th className="px-6 py-4 font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Ngày</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {gameHistory.slice(0, 10).map((h) => (
+                    <tr key={h.id} className="hover:bg-white/30 dark:hover:bg-slate-800/30 transition-colors">
+                      <td className="px-6 py-4 font-medium text-slate-700 dark:text-slate-200">{GAMES.find(g => g.id === h.gameId)?.name}</td>
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{SUBJECTS.find(s => s.id === h.subject)?.name || 'Tổng hợp'}</td>
+                      <td className="px-6 py-4 font-bold text-blue-600 dark:text-blue-400">+{h.score} XP</td>
+                      <td className="px-6 py-4 text-slate-500 dark:text-slate-400">{new Date(h.date).toLocaleDateString('vi-VN')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   if (!isAuthReady) {
@@ -844,6 +1548,20 @@ export default function App() {
                   <div className="text-2xl font-bold text-purple-500">{Object.values(chats).reduce((acc, curr) => acc + curr.length, 0)}</div>
                   <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">Tin nhắn</div>
                 </div>
+                <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50 col-span-2">
+                  <div className="text-2xl font-bold text-orange-500 flex items-center justify-center gap-2">
+                    <Trophy size={20} />
+                    {Object.values(gameScores).reduce((acc, curr) => acc + curr, 0)}
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">Tổng điểm Game (XP)</div>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50 col-span-2">
+                  <div className="text-2xl font-bold text-red-500 flex items-center justify-center gap-2">
+                    <Flame size={20} />
+                    {streak} ngày
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">Chuỗi điểm danh</div>
+                </div>
               </div>
 
               <button 
@@ -1029,26 +1747,58 @@ export default function App() {
           </button>
         </div>
 
-        <div className="px-4 py-2 flex-1 overflow-y-auto">
+        <div className="px-4 py-2 flex-1 overflow-y-auto custom-scrollbar">
+          <div className="space-y-1 mb-6">
+            <button
+              onClick={() => { setCurrentSubject(null); setCurrentView('dashboard'); setSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${currentView === 'dashboard' ? 'bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700' : 'hover:bg-white/50 dark:hover:bg-slate-800/50 border border-transparent'}`}
+            >
+              <div className={`p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500`}>
+                <LayoutDashboard size={18} />
+              </div>
+              <span className={`font-medium ${currentView === 'dashboard' ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>Dashboard</span>
+            </button>
+
+            <button
+              onClick={() => { setCurrentSubject(null); setCurrentView('games'); setCurrentGame(null); setSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${currentView === 'games' ? 'bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700' : 'hover:bg-white/50 dark:hover:bg-slate-800/50 border border-transparent'}`}
+            >
+              <div className={`p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500`}>
+                <Gamepad2 size={18} />
+              </div>
+              <span className={`font-medium ${currentView === 'games' ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>Trò chơi</span>
+            </button>
+
+            <button
+              onClick={() => { setCurrentSubject(null); setCurrentView('collection'); setSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${currentView === 'collection' ? 'bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700' : 'hover:bg-white/50 dark:hover:bg-slate-800/50 border border-transparent'}`}
+            >
+              <div className={`p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-orange-500`}>
+                <Flame size={18} />
+              </div>
+              <span className={`font-medium ${currentView === 'collection' ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>Bộ sưu tập</span>
+            </button>
+          </div>
+
           <h2 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 px-2">Môn học</h2>
           <div className="space-y-1">
             <button
-              onClick={() => handleSubjectClick(null)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${currentSubject === null ? 'bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700' : 'hover:bg-white/50 dark:hover:bg-slate-800/50 border border-transparent'}`}
+              onClick={() => { setCurrentSubject(null); setCurrentView('chat'); setSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${currentSubject === null && currentView === 'chat' ? 'bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700' : 'hover:bg-white/50 dark:hover:bg-slate-800/50 border border-transparent'}`}
             >
               <div className={`p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500`}>
                 <Lightbulb size={18} />
               </div>
-              <span className={`font-medium ${currentSubject === null ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>Tổng hợp</span>
+              <span className={`font-medium ${currentSubject === null && currentView === 'chat' ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>Tổng hợp</span>
             </button>
             
             {SUBJECTS.map(s => {
               const Icon = s.icon;
-              const isActive = currentSubject === s.id;
+              const isActive = currentSubject === s.id && currentView === 'chat';
               return (
                 <button
                   key={s.id}
-                  onClick={() => handleSubjectClick(s.id)}
+                  onClick={() => { setCurrentSubject(s.id); setCurrentView('chat'); setSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${isActive ? 'bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700' : 'hover:bg-white/50 dark:hover:bg-slate-800/50 border border-transparent'}`}
                 >
                   <div className={`p-1.5 rounded-lg ${s.bg} ${s.color}`}>
@@ -1073,16 +1823,21 @@ export default function App() {
             </button>
             
             <div className="flex items-center gap-2">
-              {currentSubject ? (
+              {currentView === 'chat' ? (
                 <>
-                  <button onClick={() => handleSubjectClick(null)} className="hidden md:flex p-1.5 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors text-slate-500">
+                  <button onClick={() => { setCurrentSubject(null); setCurrentView('dashboard'); }} className="hidden md:flex p-1.5 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors text-slate-500">
                     <ArrowLeft size={18} />
                   </button>
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 dark:bg-slate-800/50 border border-white/60 dark:border-slate-700/50 shadow-sm">
                     {React.createElement(SUBJECTS.find(s => s.id === currentSubject)?.icon || BookOpen, { size: 16, className: SUBJECTS.find(s => s.id === currentSubject)?.color })}
-                    <span className="text-sm font-medium">{SUBJECTS.find(s => s.id === currentSubject)?.name}</span>
+                    <span className="text-sm font-medium">{SUBJECTS.find(s => s.id === currentSubject)?.name || 'Tổng hợp'}</span>
                   </div>
                 </>
+              ) : currentView === 'games' ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 dark:bg-slate-800/50 border border-white/60 dark:border-slate-700/50 shadow-sm">
+                  <Gamepad2 size={16} className="text-blue-500" />
+                  <span className="text-sm font-medium">{currentGame ? GAMES.find(g => g.id === currentGame)?.name : 'Trò chơi học tập'}</span>
+                </div>
               ) : (
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 dark:bg-slate-800/50 border border-white/60 dark:border-slate-700/50 shadow-sm">
                   <Sparkles size={16} className="text-blue-500" />
@@ -1132,7 +1887,7 @@ export default function App() {
           <div className="max-w-5xl mx-auto w-full">
             
             {/* Dashboard View */}
-            {!currentSubject && activeMessages.length === 0 && (
+            {currentView === 'dashboard' && (
               <motion.div 
                 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
                 className="flex flex-col items-center justify-center min-h-[60vh]"
@@ -1144,6 +1899,33 @@ export default function App() {
                   <p className="text-slate-600 dark:text-slate-400 text-lg max-w-2xl mx-auto">
                     Nền tảng học tập thông minh đa môn học. Chọn một môn học bên dưới hoặc đặt câu hỏi trực tiếp để AI tự động nhận diện và hỗ trợ bạn.
                   </p>
+                </div>
+
+                <div className="w-full max-w-3xl mb-8">
+                  <div className="glass-panel p-6 rounded-3xl border border-white/40 dark:border-slate-700/50 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-lg">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center shadow-md">
+                        <Flame size={32} className="text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-1">Điểm danh hằng ngày</h3>
+                        <p className="text-slate-600 dark:text-slate-400 text-sm">
+                          Chuỗi hiện tại: <strong className="text-orange-500 text-lg">{streak}</strong> ngày
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleCheckIn}
+                      disabled={lastLoginDate === new Date().toISOString().split('T')[0]}
+                      className={`px-6 py-3 rounded-xl font-bold shadow-lg transition-all ${
+                        lastLoginDate === new Date().toISOString().split('T')[0]
+                          ? 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-orange-500 to-red-600 text-white hover:scale-105 active:scale-95 shadow-orange-500/30'
+                      }`}
+                    >
+                      {lastLoginDate === new Date().toISOString().split('T')[0] ? 'Đã điểm danh' : 'Điểm danh nhận thẻ'}
+                    </button>
+                  </div>
                 </div>
                 
                 {Object.keys(learningStats).length > 0 && (
@@ -1186,15 +1968,131 @@ export default function App() {
                     );
                   })}
                 </div>
+
+                <div className="mt-12 w-full">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                      <Gamepad2 className="text-blue-500" size={24} />
+                      Trò chơi nổi bật
+                    </h3>
+                    <button 
+                      onClick={() => setCurrentView('games')}
+                      className="text-sm font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      Xem tất cả
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {GAMES.slice(0, 2).map((game) => (
+                      <button
+                        key={game.id}
+                        onClick={() => { setCurrentView('games'); setCurrentGame(game.id); }}
+                        className="glass-panel p-6 rounded-3xl border border-white/40 dark:border-slate-700/50 flex items-center gap-6 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-all text-left group"
+                      >
+                        <div className={`w-16 h-16 rounded-2xl ${game.bgColor} ${game.color} flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`}>
+                          {React.createElement(game.icon, { size: 32 })}
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-slate-800 dark:text-white text-lg">{game.name}</h4>
+                          <p className="text-sm text-slate-500 dark:text-slate-400">{game.description}</p>
+                        </div>
+                        <ChevronRight className="ml-auto text-slate-300" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 
                 {/* Spacer to prevent input overlap */}
                 <div className="h-48 md:h-56 flex-shrink-0 w-full" />
               </motion.div>
             )}
 
+            {/* Games View */}
+            {currentView === 'games' && (
+              currentGame ? (
+                <GameSession gameId={currentGame} onExit={() => setCurrentGame(null)} />
+              ) : (
+                <GamesView />
+              )
+            )}
+
+            {/* Collection View */}
+            {currentView === 'collection' && (
+              <div className="p-4 md:p-8 max-w-6xl mx-auto">
+                <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-3xl font-bold text-slate-800 dark:text-white mb-2 flex items-center gap-3">
+                      <Flame className="text-orange-500" size={32} />
+                      Bộ sưu tập danh tướng
+                    </h2>
+                    <p className="text-slate-600 dark:text-slate-400">Thu thập thẻ tướng mỗi ngày. Sưu tập đủ bộ để nhận thưởng!</p>
+                  </div>
+                  <div className="flex items-center gap-4 bg-white/50 dark:bg-slate-800/50 p-4 rounded-2xl border border-white/40 dark:border-slate-700/50">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{cards.length}</div>
+                      <div className="text-xs text-slate-500 uppercase font-bold tracking-wider">Tổng thẻ</div>
+                    </div>
+                    <div className="w-px h-10 bg-slate-200 dark:bg-slate-700"></div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-orange-500">{new Set(cards.map(c => c.generalId)).size}/{GENERALS.length}</div>
+                      <div className="text-xs text-slate-500 uppercase font-bold tracking-wider">Tướng</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+                  {GENERALS.map(general => {
+                    const ownedCards = cards.filter(c => c.generalId === general.id);
+                    const isOwned = ownedCards.length > 0;
+                    // Find highest rank owned
+                    const rankOrder: GeneralRank[] = ['C', 'B', 'A', 'S', 'S+', 'SSS'];
+                    let highestRank: GeneralRank = 'C';
+                    if (isOwned) {
+                      highestRank = ownedCards.reduce((highest, current) => {
+                        return rankOrder.indexOf(current.rank) > rankOrder.indexOf(highest) ? current.rank : highest;
+                      }, 'C' as GeneralRank);
+                    }
+
+                    return (
+                      <motion.div
+                        key={general.id}
+                        whileHover={isOwned ? { y: -5, scale: 1.02 } : {}}
+                        onClick={() => isOwned && setSelectedCard({ general, rank: highestRank })}
+                        className={`relative aspect-[2/3] rounded-2xl overflow-hidden cursor-pointer transition-all ${
+                          isOwned ? 'shadow-xl' : 'opacity-50 grayscale hover:grayscale-0 hover:opacity-80'
+                        }`}
+                      >
+                        <img src={general.image} alt={general.name} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>
+                        
+                        <div className="absolute bottom-0 left-0 right-0 p-4">
+                          <h3 className="text-white font-bold text-lg leading-tight mb-1">{general.name}</h3>
+                          <p className="text-slate-300 text-xs">{general.era}</p>
+                        </div>
+
+                        {isOwned && (
+                          <div className={`absolute top-3 right-3 w-8 h-8 rounded-full bg-gradient-to-br ${RANK_COLORS[highestRank]} flex items-center justify-center font-bold text-sm shadow-lg border-2 border-white/20`}>
+                            {highestRank}
+                          </div>
+                        )}
+                        
+                        {!isOwned && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="bg-black/60 backdrop-blur-sm px-4 py-2 rounded-full text-white/80 font-medium text-sm flex items-center gap-2">
+                              <Lock size={16} /> Chưa sở hữu
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Chat View */}
-            {(currentSubject || activeMessages.length > 0) && (
-              <div className="max-w-3xl mx-auto w-full">
+            {currentView === 'chat' && (
+              <div className="space-y-6">
                 {activeMessages.length === 0 && currentSubject && (
                   <motion.div 
                     initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
@@ -1280,7 +2178,8 @@ export default function App() {
         </main>
 
         {/* Input Area */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 pt-10 bg-gradient-to-t from-slate-50 dark:from-slate-950 via-slate-50/90 dark:via-slate-950/90 to-transparent pointer-events-none">
+        {currentView === 'chat' && (
+          <div className="absolute bottom-0 left-0 right-0 p-4 pt-10 bg-gradient-to-t from-slate-50 dark:from-slate-950 via-slate-50/90 dark:via-slate-950/90 to-transparent pointer-events-none">
           <div className="max-w-3xl mx-auto w-full pointer-events-auto relative">
             
             {/* Scroll to Bottom Button */}
@@ -1353,7 +2252,107 @@ export default function App() {
             </p>
           </div>
         </div>
+        )}
       </div>
+
+      {/* Card Reveal Modal */}
+      <AnimatePresence>
+        {showCardReveal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center px-4">
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/90 backdrop-blur-sm"
+              onClick={() => setShowCardReveal(null)}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.5, rotateY: 180 }} 
+              animate={{ opacity: 1, scale: 1, rotateY: 0 }} 
+              exit={{ opacity: 0, scale: 0.5, rotateY: -180 }}
+              transition={{ type: "spring", duration: 0.8, bounce: 0.4 }}
+              className={`relative aspect-[2/3] w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl ${
+                showCardReveal.rank === 'SSS' ? 'animate-shake' : ''
+              }`}
+            >
+              <div className={`absolute inset-0 bg-gradient-to-br ${RANK_COLORS[showCardReveal.rank]} opacity-20`}></div>
+              <img src={showCardReveal.general.image} alt={showCardReveal.general.name} className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>
+              
+              <div className="absolute bottom-0 left-0 right-0 p-6 text-center">
+                <motion.div 
+                  initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}
+                >
+                  <div className={`inline-block px-4 py-1 rounded-full bg-gradient-to-br ${RANK_COLORS[showCardReveal.rank]} font-bold text-lg mb-3 shadow-lg border-2 border-white/20`}>
+                    Hạng {showCardReveal.rank}
+                  </div>
+                  <h2 className="text-3xl font-bold text-white mb-1">{showCardReveal.general.name}</h2>
+                  <p className="text-slate-300 text-sm mb-4">{showCardReveal.general.era}</p>
+                  
+                  <button 
+                    onClick={() => setShowCardReveal(null)}
+                    className="px-8 py-3 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-md text-white font-bold transition-colors border border-white/30"
+                  >
+                    Thu thập
+                  </button>
+                </motion.div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Card Detail Modal */}
+      <AnimatePresence>
+        {selectedCard && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center px-4">
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              onClick={() => setSelectedCard(null)}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }} 
+              animate={{ opacity: 1, scale: 1, y: 0 }} 
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-4xl bg-slate-900 rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row border border-slate-700"
+            >
+              <button onClick={() => setSelectedCard(null)} className="absolute top-4 right-4 p-2 text-white/50 hover:text-white bg-black/20 hover:bg-black/40 rounded-full transition-colors z-10">
+                <X size={20} />
+              </button>
+              
+              <div className="md:w-2/5 relative aspect-[3/4] md:aspect-auto">
+                <img src={selectedCard.general.image} alt={selectedCard.general.name} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent md:bg-gradient-to-r"></div>
+                <div className={`absolute top-4 left-4 px-4 py-1.5 rounded-full bg-gradient-to-br ${RANK_COLORS[selectedCard.rank]} font-bold shadow-lg border border-white/20`}>
+                  Hạng {selectedCard.rank}
+                </div>
+              </div>
+              
+              <div className="md:w-3/5 p-6 md:p-10 flex flex-col justify-center">
+                <div className="mb-6">
+                  <h2 className="text-3xl md:text-4xl font-bold text-white mb-2">{selectedCard.general.name}</h2>
+                  <div className="flex items-center gap-3 text-slate-400 font-medium">
+                    <span>{selectedCard.general.country}</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
+                    <span>{selectedCard.general.era}</span>
+                  </div>
+                </div>
+                
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2">Xuất thân</h3>
+                    <p className="text-slate-300 leading-relaxed">{selectedCard.general.origin}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2">Công lao</h3>
+                    <p className="text-slate-300 leading-relaxed">{selectedCard.general.achievements}</p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
