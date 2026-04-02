@@ -16,6 +16,7 @@ import {
   signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User as FirebaseUser,
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile
 } from 'firebase/auth';
+import { GENERALS, GeneralRank, General } from './data/generals';
 
 type Message = {
   id: string;
@@ -49,6 +50,10 @@ type Game = {
   icon: React.ElementType;
   color: string;
   bgColor: string;
+  tag: string;
+  buttonColor: string;
+  floatingIcon: string;
+  bgTint: string;
 };
 
 type GameQuestion = {
@@ -69,31 +74,12 @@ type GameHistory = {
   subject: string;
 };
 
-type GeneralRank = 'C' | 'B' | 'A' | 'S' | 'S+' | 'SSS';
-
-type General = {
-  id: string;
-  name: string;
-  country: string;
-  era: string;
-  origin: string;
-  achievements: string;
-  image: string;
-};
-
 type UserCard = {
   id: string;
   generalId: string;
   rank: GeneralRank;
   dateAcquired: string;
 };
-
-const GENERALS: General[] = [
-  { id: 'tran-hung-dao', name: 'Trần Hưng Đạo', country: 'Việt Nam', era: 'Nhà Trần', origin: 'Hoàng tộc nhà Trần', achievements: '3 lần đánh bại quân Nguyên Mông', image: 'https://picsum.photos/seed/tranhungdao/400/600' },
-  { id: 'quang-trung', name: 'Quang Trung', country: 'Việt Nam', era: 'Nhà Tây Sơn', origin: 'Nông dân khởi nghĩa', achievements: 'Đánh bại quân Thanh, thống nhất đất nước', image: 'https://picsum.photos/seed/quangtrung/400/600' },
-  { id: 'napoleon', name: 'Napoleon', country: 'Pháp', era: 'Đế chế Pháp', origin: 'Quý tộc nhỏ', achievements: 'Chinh phục phần lớn châu Âu', image: 'https://picsum.photos/seed/napoleon/400/600' },
-  { id: 'thanh-cat-tu-han', name: 'Thành Cát Tư Hãn', country: 'Mông Cổ', era: 'Đế quốc Mông Cổ', origin: 'Thủ lĩnh bộ lạc', achievements: 'Lập nên đế quốc liền thổ lớn nhất lịch sử', image: 'https://picsum.photos/seed/genghis/400/600' },
-];
 
 const RANK_RATES = {
   'C': 0.40,
@@ -128,11 +114,48 @@ const SUBJECTS: Subject[] = [
 ];
 
 const GAMES: Game[] = [
-  { id: 'quiz', name: 'QUIZ NHANH', description: 'Câu hỏi trắc nghiệm kiến thức tổng hợp.', icon: Brain, color: 'text-blue-500', bgColor: 'bg-blue-100 dark:bg-blue-500/20' },
-  { id: 'race', name: 'ĐUA TOP KIẾN THỨC', description: 'Trả lời nhanh nhất có thể để ghi điểm.', icon: Timer, color: 'text-red-500', bgColor: 'bg-red-100 dark:bg-red-500/20' },
-  { id: 'match', name: 'GHÉP ĐÔI', description: 'Ghép từ vựng hoặc công thức với nghĩa đúng.', icon: Puzzle, color: 'text-green-500', bgColor: 'bg-green-100 dark:bg-green-500/20' },
-  { id: 'guess', name: 'ĐOÁN NHANH', description: 'AI đưa gợi ý, bạn đoán đáp án.', icon: Lightbulb, color: 'text-yellow-500', bgColor: 'bg-yellow-100 dark:bg-yellow-500/20' },
-  { id: 'math', name: 'TRÒ CHƠI TOÁN', description: 'Thử thách tính nhẩm siêu tốc.', icon: CalcIcon, color: 'text-purple-500', bgColor: 'bg-purple-100 dark:bg-purple-500/20' },
+  { 
+    id: 'quiz', 
+    name: 'Ai là triệu phú', 
+    description: 'Vượt qua các câu hỏi hóc búa để chinh phục đỉnh cao trí tuệ và nhận phần thưởng lớn.', 
+    icon: Brain, color: 'text-orange-500', bgColor: 'bg-orange-100 dark:bg-orange-500/20',
+    tag: '🔥 Hot', buttonColor: 'from-orange-500 to-orange-600', floatingIcon: '🏆', bgTint: 'bg-orange-50/50 dark:bg-orange-900/10'
+  },
+  { 
+    id: 'race', 
+    name: 'Vượt chướng ngại vật', 
+    description: 'Nhanh mắt nhanh tay giải mã các từ khóa để về đích sớm nhất trong cuộc đua này.', 
+    icon: Timer, color: 'text-cyan-500', bgColor: 'bg-cyan-100 dark:bg-cyan-500/20',
+    tag: '⚡ Hấp dẫn', buttonColor: 'from-cyan-400 to-cyan-500', floatingIcon: '🏃', bgTint: 'bg-cyan-50/50 dark:bg-cyan-900/10'
+  },
+  { 
+    id: 'match', 
+    name: 'Lật thẻ bí ẩn', 
+    description: 'Thử thách trí nhớ siêu phàm bằng cách tìm ra các cặp thẻ bài giống nhau ẩn giấu.', 
+    icon: Puzzle, color: 'text-green-500', bgColor: 'bg-green-100 dark:bg-green-500/20',
+    tag: '🎯 Trí nhớ', buttonColor: 'from-green-500 to-green-600', floatingIcon: '🃏', bgTint: 'bg-green-50/50 dark:bg-green-900/10'
+  },
+  { 
+    id: 'guess', 
+    name: 'Rung chuông vàng', 
+    description: 'Sàn đấu tri thức dành cho những bạn nhỏ tự tin nhất. Ai sẽ là người cuối cùng?', 
+    icon: Lightbulb, color: 'text-pink-500', bgColor: 'bg-pink-100 dark:bg-pink-500/20',
+    tag: '🔔 Kịch tính', buttonColor: 'from-pink-500 to-rose-500', floatingIcon: '🔔', bgTint: 'bg-pink-50/50 dark:bg-pink-900/10'
+  },
+  { 
+    id: 'math', 
+    name: 'Hái hoa dân chủ', 
+    description: 'Chọn cho mình một bông hoa may mắn và trả lời câu hỏi để nhận những món quà bất ngờ.', 
+    icon: CalcIcon, color: 'text-fuchsia-500', bgColor: 'bg-fuchsia-100 dark:bg-fuchsia-500/20',
+    tag: '🌈 Vui nhộn', buttonColor: 'from-fuchsia-500 to-pink-500', floatingIcon: '🌸', bgTint: 'bg-fuchsia-50/50 dark:bg-fuchsia-900/10'
+  },
+  { 
+    id: 'crossword', 
+    name: 'Ô chữ thần kỳ', 
+    description: 'Khám phá các hàng ngang bí mật để tìm ra từ khóa trung tâm của trò chơi.', 
+    icon: Edit3, color: 'text-indigo-500', bgColor: 'bg-indigo-100 dark:bg-indigo-500/20',
+    tag: '🧩 Khám phá', buttonColor: 'from-indigo-500 to-purple-500', floatingIcon: '🔤', bgTint: 'bg-indigo-50/50 dark:bg-indigo-900/10'
+  },
 ];
 
 const getSystemInstruction = (subjectId: string | null) => {
@@ -1233,55 +1256,73 @@ export default function App() {
 
   const GamesView = () => {
     return (
-      <div className="p-4 md:p-8 max-w-6xl mx-auto">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-slate-800 dark:text-white mb-2 flex items-center gap-3">
-            <Gamepad2 className="text-blue-500" size={32} />
-            Trò chơi học tập
+      <div className="p-4 md:p-8 max-w-6xl mx-auto relative">
+        {/* Decorative background elements */}
+        <div className="absolute top-10 left-10 w-4 h-4 bg-pink-300 rounded-sm rotate-12 opacity-50"></div>
+        <div className="absolute top-20 right-20 w-3 h-3 bg-blue-300 rounded-full opacity-50"></div>
+        <div className="absolute top-40 left-1/4 w-2 h-2 bg-yellow-300 rounded-full opacity-50"></div>
+        <div className="absolute top-32 right-1/3 w-4 h-4 bg-green-300 rounded-sm -rotate-12 opacity-50"></div>
+
+        <div className="mb-12 text-center relative z-10">
+          <div className="flex justify-center gap-2 mb-4 text-2xl">
+            <span>📚</span>
+            <span>🎯</span>
+            <span>🧠</span>
+            <span>⭐</span>
+            <span>🏆</span>
+            <span>🎨</span>
+          </div>
+          <h2 className="text-4xl md:text-5xl font-extrabold mb-4 tracking-tight">
+            <span className="text-teal-500">HỌC </span>
+            <span className="text-blue-500">VUI </span>
+            <span className="text-pink-500">MỖI </span>
+            <span className="text-orange-500">NGÀY</span>
           </h2>
-          <p className="text-slate-600 dark:text-slate-400">Vừa học vừa chơi, tích lũy XP và nâng cao kiến thức mỗi ngày!</p>
+          <p className="text-slate-600 dark:text-slate-400 text-lg max-w-2xl mx-auto">
+            Khám phá thế giới kiến thức qua những trò chơi vui nhộn và đầy thử thách 🌟
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
           {GAMES.map((game) => {
-            const Icon = game.icon;
-            const highScore = gameScores[game.id] || 0;
             return (
               <motion.div
                 key={game.id}
-                whileHover={{ y: -5, scale: 1.02 }}
-                className="glass-panel p-6 rounded-3xl border border-white/40 dark:border-slate-700/50 flex flex-col h-full group"
+                whileHover={{ y: -8, scale: 1.02 }}
+                className={`relative p-6 rounded-3xl border border-white/60 dark:border-slate-700/50 flex flex-col h-full group shadow-xl ${game.bgTint} backdrop-blur-sm`}
               >
-                <div className={`w-14 h-14 rounded-2xl ${game.bgColor} ${game.color} flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform`}>
-                  <Icon size={28} />
+                {/* Floating Icon */}
+                <div className="absolute -top-4 -right-4 w-12 h-12 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-2xl shadow-lg flex items-center justify-center text-2xl border border-white/50 dark:border-slate-700/50 transform rotate-12 group-hover:rotate-0 transition-transform">
+                  {game.floatingIcon}
                 </div>
-                <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2 uppercase tracking-tight">{game.name}</h3>
-                <p className="text-sm text-slate-600 dark:text-slate-400 mb-6 flex-1">{game.description}</p>
+
+                {/* Tag */}
+                <div className="inline-flex items-center gap-1 px-3 py-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-full text-xs font-bold text-slate-600 dark:text-slate-300 shadow-sm border border-white/50 dark:border-slate-700/50 w-max mb-4">
+                  {game.tag}
+                </div>
+
+                <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-3">{game.name}</h3>
+                <p className="text-slate-600 dark:text-slate-400 mb-8 flex-1 leading-relaxed">{game.description}</p>
                 
-                <div className="flex items-center justify-between mt-auto">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Điểm cao nhất</span>
-                    <span className="text-lg font-bold text-blue-600 dark:text-blue-400">{highScore}</span>
-                  </div>
-                  <button
-                    onClick={() => setCurrentGame(game.id)}
-                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold text-sm shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all"
-                  >
-                    Chơi ngay
-                  </button>
-                </div>
+                <button
+                  onClick={() => setCurrentGame(game.id)}
+                  className={`w-full py-3.5 rounded-2xl bg-gradient-to-r ${game.buttonColor} text-white font-bold text-lg shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2`}
+                >
+                  <Play size={20} className="fill-current" />
+                  Chơi ngay
+                </button>
               </motion.div>
             );
           })}
         </div>
 
         {gameHistory.length > 0 && (
-          <div className="mt-12">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
-              <History size={20} className="text-slate-400" />
+          <div className="mt-16">
+            <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-3 justify-center">
+              <History size={24} className="text-slate-400" />
               Lịch sử chơi
             </h3>
-            <div className="glass-panel rounded-2xl overflow-hidden border border-white/40 dark:border-slate-700/50">
+            <div className="glass-panel rounded-3xl overflow-hidden border border-white/40 dark:border-slate-700/50 shadow-xl">
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
                   <tr>
