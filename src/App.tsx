@@ -4,7 +4,7 @@ import {
   Send, Bot, User, Menu, X, Moon, Sun, 
   BookOpen, Calculator, Languages, Zap, FlaskConical, Dna,
   Landmark, Globe, Monitor, Cpu, Settings, LayoutDashboard, Users,
-  Sparkles, History, ChevronRight, ArrowLeft, Lightbulb, ArrowDown, LogOut, Edit3, Lock, Flame, Trophy, FileText, Camera, Image as ImageIcon, Target
+  Sparkles, History, ChevronRight, ArrowLeft, Lightbulb, ArrowDown, LogOut, Edit3, Lock, Flame, Trophy, FileText, Camera, Image as ImageIcon, Target, Paperclip, Loader2
 } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
 import Markdown from 'react-markdown';
@@ -153,6 +153,8 @@ export default function App() {
   const [chats, setChats] = useState<Record<string, Message[]>>({});
   const [inputValue, setInputValue] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [learningStats, setLearningStats] = useState<Record<string, number>>({});
   const [isScrolledUp, setIsScrolledUp] = useState(false);
@@ -192,6 +194,147 @@ export default function App() {
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const aiRef = useRef<any>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
+  const chatGeneralFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setSelectedImage(event.target?.result as string);
+        setSelectedFile(null);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setSelectedFile(file);
+      setSelectedImage(null);
+    }
+  };
+
+  const analyzeFile = async () => {
+    if (!selectedFile && !selectedImage) return;
+    
+    setIsAnalyzing(true);
+    const chatId = currentSubject || 'general';
+    const subjectName = SUBJECTS.find(s => s.id === currentSubject)?.name || 'Tổng hợp';
+    
+    const aiMsgId = Date.now().toString();
+    const fileName = selectedFile?.name || 'Hình ảnh';
+    
+    setChats(prev => ({
+      ...prev,
+      [chatId]: [...(prev[chatId] || []), { 
+        id: Date.now().toString(), 
+        role: 'user', 
+        content: `Phân tích file: ${fileName}`,
+        image: selectedImage || undefined
+      }]
+    }));
+
+    try {
+      let fileData: any = null;
+      let prompt = `Bạn là AI chuyên gia phân tích tệp học tập cho môn ${subjectName}.
+Nhiệm vụ: Đọc và xử lý nội dung từ tệp được cung cấp.
+
+YÊU CẦU ĐẦU RA (BẮT BUỘC TRÌNH BÀY THEO FORMAT):
+📌 1. Tóm tắt nội dung file: (Tóm tắt ngắn gọn các ý chính)
+📌 2. Giải / trả lời: (Giải các bài tập, câu hỏi hoặc phân tích nội dung trong file)
+📌 3. Giải thích: (Giải thích chi tiết các bước giải hoặc kiến thức liên quan)
+📌 4. Gợi ý học: (Các bài tập tương tự hoặc mẹo để học tốt phần này)
+
+Lưu ý theo môn học:
+- Toán: Giải chi tiết các bước.
+- Văn: Phân tích tác phẩm, ý nghĩa.
+- Anh: Dịch và giải thích ngữ pháp.
+- Lý/Hóa: Nêu công thức, phản ứng và cách tính.
+- Các môn khác: Tóm tắt và giải thích kiến thức trọng tâm.`;
+
+      const contents: any[] = [];
+      
+      if (selectedImage) {
+        const base64Data = selectedImage.split(',')[1];
+        const mimeType = selectedImage.split(';')[0].split(':')[1];
+        contents.push({
+          role: 'user',
+          parts: [
+            { inlineData: { data: base64Data, mimeType: mimeType } },
+            { text: prompt }
+          ]
+        });
+      } else if (selectedFile) {
+        const fileType = selectedFile.type;
+        
+        if (fileType === 'application/pdf' || fileType === 'text/plain') {
+          const reader = new FileReader();
+          const base64Promise = new Promise<string>((resolve) => {
+            reader.onload = () => resolve((reader.result as string).split(',')[1]);
+            reader.readAsDataURL(selectedFile);
+          });
+          const base64Data = await base64Promise;
+          contents.push({
+            role: 'user',
+            parts: [
+              { inlineData: { data: base64Data, mimeType: fileType } },
+              { text: prompt }
+            ]
+          });
+        } else {
+          // For DOCX, XLSX, PPTX, we try to extract text if possible or inform user
+          // In this simplified version, we'll try to read as text for now
+          const reader = new FileReader();
+          const textPromise = new Promise<string>((resolve) => {
+            reader.onload = () => resolve(reader.result as string);
+            reader.readAsText(selectedFile);
+          });
+          const text = await textPromise;
+          contents.push({
+            role: 'user',
+            parts: [
+              { text: `Nội dung file ${selectedFile.name}:\n${text}\n\n${prompt}` }
+            ]
+          });
+        }
+      }
+
+      const responseStream = await aiRef.current.models.generateContentStream({
+        model: 'gemini-3.1-pro-preview',
+        contents: contents,
+        config: {
+          temperature: 0.4,
+        }
+      });
+
+      let fullText = '';
+      let isFirstChunk = true;
+
+      for await (const chunk of (responseStream as any)) {
+        if (isFirstChunk) {
+          setIsAnalyzing(false);
+          setSelectedFile(null);
+          setSelectedImage(null);
+          setChats(prev => ({
+            ...prev,
+            [chatId]: [...(prev[chatId] || []), { id: aiMsgId, role: 'ai', content: '' }]
+          }));
+          isFirstChunk = false;
+        }
+        
+        fullText += chunk.text;
+        setChats(prev => ({
+          ...prev,
+          [chatId]: prev[chatId].map(m => m.id === aiMsgId ? { ...m, content: fullText } : m)
+        }));
+      }
+    } catch (error) {
+      console.error("Analysis failed", error);
+      setIsAnalyzing(false);
+      setSelectedFile(null);
+      setSelectedImage(null);
+      showToast("Không thể phân tích file này. Vui lòng thử lại với định dạng khác.", "error");
+    }
+  };
 
   useEffect(() => {
     aiRef.current = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -312,17 +455,6 @@ export default function App() {
       const reader = new FileReader();
       reader.onloadend = () => {
         setEditForm(prev => ({ ...prev, avatar: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setSelectedImage(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
@@ -495,14 +627,20 @@ export default function App() {
     return <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>;
   };
 
-  const handleSend = async (text: string = inputValue, image: string | null = selectedImage) => {
-    if (!text.trim() && !image) return;
+  const handleSend = async (text: string = inputValue, image: string | null = selectedImage, file: File | null = selectedFile) => {
+    if (!text.trim() && !image && !file) return;
+    
+    if (file && !text.trim() && !image) {
+      analyzeFile();
+      return;
+    }
     
     let targetSubject = currentSubject;
     let isUnknown = false;
     
     setInputValue('');
     setSelectedImage(null);
+    setSelectedFile(null);
     setIsTyping(true);
 
     if (currentSubject === null && !image) {
@@ -1470,23 +1608,49 @@ export default function App() {
               </motion.div>
             )}
 
-            {/* Image Preview */}
+            {/* Image/File Preview */}
             <AnimatePresence>
-              {selectedImage && (
+              {(selectedImage || selectedFile) && (
                 <motion.div 
                   initial={{ opacity: 0, y: 10, height: 0 }}
                   animate={{ opacity: 1, y: 0, height: 'auto' }}
                   exit={{ opacity: 0, y: 10, height: 0 }}
-                  className="mb-3 relative inline-block"
+                  className="mb-3 relative inline-block w-full"
                 >
-                  <div className="relative rounded-2xl overflow-hidden border-2 border-blue-500 shadow-lg max-w-[200px]">
-                    <img src={selectedImage} alt="Preview" className="w-full h-auto object-cover" />
-                    <button 
-                      onClick={() => setSelectedImage(null)}
-                      className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-sm transition-colors"
-                    >
-                      <X size={14} />
-                    </button>
+                  <div className="flex items-center gap-4 p-3 glass-panel rounded-2xl border-2 border-blue-500 shadow-lg max-w-md">
+                    {selectedImage ? (
+                      <div className="relative rounded-xl overflow-hidden w-20 h-20 flex-shrink-0">
+                        <img src={selectedImage} alt="Preview" className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 flex-shrink-0">
+                        <FileText size={24} />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-800 dark:text-white truncate">
+                        {selectedFile?.name || 'Hình ảnh đã chọn'}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {selectedFile ? `${(selectedFile.size / 1024).toFixed(1)} KB` : 'Sẵn sàng phân tích'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={analyzeFile}
+                        disabled={isAnalyzing}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {isAnalyzing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                        Phân tích
+                      </button>
+                      <button 
+                        onClick={() => { setSelectedImage(null); setSelectedFile(null); }}
+                        className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -1496,20 +1660,36 @@ export default function App() {
             <div className="relative group">
               <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-purple-600 rounded-3xl blur opacity-20 group-hover:opacity-30 transition duration-500"></div>
               <div className="relative flex items-end gap-2 glass-input rounded-3xl p-2 pl-3 pr-3 shadow-lg">
-                <button 
-                  onClick={() => chatFileInputRef.current?.click()}
-                  className="p-3 text-slate-400 hover:text-blue-500 transition-colors flex-shrink-0"
-                  title="Tải ảnh lên"
-                >
-                  <Camera size={22} />
-                  <input 
-                    type="file" 
-                    ref={chatFileInputRef} 
-                    onChange={handleImageUpload} 
-                    className="hidden" 
-                    accept="image/*"
-                  />
-                </button>
+                <div className="flex items-center">
+                  <button 
+                    onClick={() => chatFileInputRef.current?.click()}
+                    className="p-3 text-slate-400 hover:text-blue-500 transition-colors flex-shrink-0"
+                    title="Tải ảnh lên"
+                  >
+                    <Camera size={22} />
+                    <input 
+                      type="file" 
+                      ref={chatFileInputRef} 
+                      onChange={handleFileUpload} 
+                      className="hidden" 
+                      accept="image/*"
+                    />
+                  </button>
+                  <button 
+                    onClick={() => chatGeneralFileInputRef.current?.click()}
+                    className="p-3 text-slate-400 hover:text-blue-500 transition-colors flex-shrink-0"
+                    title="Tải file (PDF, Word, TXT...)"
+                  >
+                    <Paperclip size={22} />
+                    <input 
+                      type="file" 
+                      ref={chatGeneralFileInputRef} 
+                      onChange={handleFileUpload} 
+                      className="hidden" 
+                      accept=".pdf,.docx,.xlsx,.pptx,.txt"
+                    />
+                  </button>
+                </div>
                 <textarea
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
@@ -1527,14 +1707,14 @@ export default function App() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => handleSend()}
-                  disabled={(!inputValue.trim() && !selectedImage) || isTyping}
+                  disabled={(!inputValue.trim() && !selectedImage && !selectedFile) || isTyping || isAnalyzing}
                   className={`relative overflow-hidden p-3 rounded-2xl flex-shrink-0 transition-all duration-300 ${
-                    (inputValue.trim() || selectedImage) && !isTyping
+                    (inputValue.trim() || selectedImage || selectedFile) && !isTyping && !isAnalyzing
                       ? 'bg-gradient-to-br from-blue-500 to-purple-600 text-white shadow-md hover:shadow-lg' 
                       : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
                   }`}
                 >
-                  <Send size={20} className={(inputValue.trim() || selectedImage) && !isTyping ? 'translate-x-0.5 -translate-y-0.5' : ''} />
+                  <Send size={20} className={(inputValue.trim() || selectedImage || selectedFile) && !isTyping && !isAnalyzing ? 'translate-x-0.5 -translate-y-0.5' : ''} />
                 </motion.button>
               </div>
             </div>

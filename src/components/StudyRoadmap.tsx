@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Map, Target, Clock, BookOpen, Brain, TrendingUp, Loader2, Sparkles, FileText, Download } from 'lucide-react';
+import { Map, Target, Clock, BookOpen, Brain, TrendingUp, Loader2, Sparkles, FileText, Download, FileDown } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx';
+import { saveAs } from 'file-saver';
 
 interface StudyRoadmapProps {
   ai: GoogleGenAI;
@@ -21,6 +23,162 @@ export default function StudyRoadmap({ ai, userProfile }: StudyRoadmapProps) {
   
   const [isGenerating, setIsGenerating] = useState(false);
   const [roadmapContent, setRoadmapContent] = useState<string | null>(null);
+
+  const handleExportWord = async () => {
+    if (!roadmapContent) return;
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('vi-VN');
+    const timeStr = now.toLocaleTimeString('vi-VN');
+
+    const doc = new Document({
+      sections: [
+        {
+          properties: {},
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({
+                  text: "LỘ TRÌNH HỌC TẬP CÁ NHÂN",
+                  bold: true,
+                  size: 36, // 18pt
+                  font: "Times New Roman",
+                }),
+              ],
+            }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({
+                  text: `Ngày tạo: ${dateStr} | Giờ tạo: ${timeStr}`,
+                  italics: true,
+                  size: 22, // 11pt
+                  font: "Times New Roman",
+                }),
+              ],
+            }),
+            new Paragraph({ text: "", spacing: { after: 200 } }),
+
+            // Thông tin học sinh
+            new Paragraph({
+              children: [
+                new TextRun({ text: "Họ tên: ", bold: true, font: "Times New Roman", size: 26 }),
+                new TextRun({ text: userProfile?.displayName || "Học sinh", font: "Times New Roman", size: 26 }),
+              ],
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({ text: "Lớp: ", bold: true, font: "Times New Roman", size: 26 }),
+                new TextRun({ text: classLevel || "N/A", font: "Times New Roman", size: 26 }),
+              ],
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({ text: "Cấp học: ", bold: true, font: "Times New Roman", size: 26 }),
+                new TextRun({ text: level, font: "Times New Roman", size: 26 }),
+              ],
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({ text: "Mục tiêu: ", bold: true, font: "Times New Roman", size: 26 }),
+                new TextRun({ text: goal, font: "Times New Roman", size: 26 }),
+              ],
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({ text: "Môn học mạnh: ", bold: true, font: "Times New Roman", size: 26 }),
+                new TextRun({ text: strongSubjects, font: "Times New Roman", size: 26 }),
+              ],
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({ text: "Môn học yếu: ", bold: true, font: "Times New Roman", size: 26 }),
+                new TextRun({ text: weakSubjects, font: "Times New Roman", size: 26 }),
+              ],
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({ text: "Thời gian học mỗi ngày: ", bold: true, font: "Times New Roman", size: 26 }),
+                new TextRun({ text: studyTime, font: "Times New Roman", size: 26 }),
+              ],
+            }),
+            new Paragraph({ text: "", spacing: { after: 400 } }),
+
+            // Nội dung lộ trình
+            ...roadmapContent.split('\n').map(line => {
+              const trimmed = line.trim();
+              if (trimmed.startsWith('## ')) {
+                return new Paragraph({
+                  heading: HeadingLevel.HEADING_2,
+                  spacing: { before: 240, after: 120 },
+                  children: [
+                    new TextRun({
+                      text: trimmed.replace('## ', '').toUpperCase(),
+                      bold: true,
+                      size: 28, // 14pt
+                      font: "Times New Roman",
+                      color: "2E7D32", // Emerald-ish
+                    }),
+                  ],
+                });
+              } else if (trimmed.startsWith('### ')) {
+                return new Paragraph({
+                  heading: HeadingLevel.HEADING_3,
+                  spacing: { before: 200, after: 100 },
+                  children: [
+                    new TextRun({
+                      text: trimmed.replace('### ', ''),
+                      bold: true,
+                      size: 26, // 13pt
+                      font: "Times New Roman",
+                    }),
+                  ],
+                });
+              } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+                return new Paragraph({
+                  bullet: { level: 0 },
+                  spacing: { line: 360 }, // 1.5 line spacing
+                  children: [
+                    new TextRun({
+                      text: trimmed.substring(2),
+                      size: 26, // 13pt
+                      font: "Times New Roman",
+                    }),
+                  ],
+                });
+              } else if (trimmed.length > 0) {
+                // Check for bold text in markdown
+                const parts = trimmed.split(/(\*\*.*?\*\*)/g);
+                return new Paragraph({
+                  spacing: { line: 360 }, // 1.5 line spacing
+                  children: parts.map(part => {
+                    if (part.startsWith('**') && part.endsWith('**')) {
+                      return new TextRun({
+                        text: part.replace(/\*\*/g, ''),
+                        bold: true,
+                        size: 26,
+                        font: "Times New Roman",
+                      });
+                    }
+                    return new TextRun({
+                      text: part,
+                      size: 26,
+                      font: "Times New Roman",
+                    });
+                  }),
+                });
+              }
+              return new Paragraph({ text: "" });
+            }),
+          ],
+        },
+      ],
+    });
+
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `Lo_trinh_hoc_${userProfile?.displayName || 'Hoc_sinh'}.docx`);
+  };
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -192,20 +350,28 @@ BẮT BUỘC TRÌNH BÀY THEO FORMAT SAU (Sử dụng Markdown):
                 <BookOpen size={18} className="text-emerald-500" /> Kết quả lộ trình
               </h3>
               {roadmapContent && !isGenerating && (
-                <button 
-                  onClick={() => {
-                    const blob = new Blob([roadmapContent], { type: 'text/markdown;charset=utf-8' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `Lo_Trinh_Hoc_Tap_${userProfile?.displayName || 'HS'}.md`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-white rounded-lg font-medium transition-colors flex items-center gap-2 text-sm"
-                >
-                  <Download size={16} /> Tải Markdown
-                </button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={handleExportWord}
+                    className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 text-emerald-700 dark:text-emerald-400 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm border border-emerald-200 dark:border-emerald-500/30"
+                  >
+                    <FileDown size={16} /> Xuất Word (.docx)
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const blob = new Blob([roadmapContent], { type: 'text/markdown;charset=utf-8' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `Lo_Trinh_Hoc_Tap_${userProfile?.displayName || 'HS'}.md`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-white rounded-lg font-medium transition-colors flex items-center gap-2 text-sm"
+                  >
+                    <Download size={16} /> Tải Markdown
+                  </button>
+                </div>
               )}
             </div>
             
