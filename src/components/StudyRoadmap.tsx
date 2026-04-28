@@ -5,7 +5,10 @@ import { GoogleGenAI } from '@google/genai';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx';
-import { saveAs } from 'file-saver';
+import fileSaver from 'file-saver';
+const { saveAs } = fileSaver;
+
+import { apiQueue, retryWithBackoff, getFromCache, setCache } from '../lib/api-utils';
 
 interface StudyRoadmapProps {
   ai: GoogleGenAI;
@@ -234,19 +237,30 @@ BẮT BUỘC TRÌNH BÀY THEO FORMAT SAU (Sử dụng Markdown):
 (Lời khuyên, mục tiêu nhỏ)`;
 
     try {
-      const responseStream = await ai.models.generateContentStream({
+      const cacheKey = `roadmap_${level}_${classLevel}_${strongSubjects}_${weakSubjects}_${goal}_${studyTime}_${extraDesc}`;
+      const cached = getFromCache(cacheKey);
+      
+      if (cached) {
+        setRoadmapContent(cached);
+        setIsGenerating(false);
+        return;
+      }
+
+      const responseStream = await apiQueue.add(() => retryWithBackoff(() => ai.models.generateContentStream({
         model: 'gemini-3.1-pro-preview',
         contents: prompt,
         config: {
           temperature: 0.7,
         }
-      });
+      })));
 
       let fullText = '';
       for await (const chunk of responseStream) {
         fullText += chunk.text;
         setRoadmapContent(fullText);
       }
+      
+      setCache(cacheKey, fullText);
     } catch (error) {
       console.error("Error generating roadmap:", error);
       setRoadmapContent("Đã có lỗi xảy ra khi tạo lộ trình. Vui lòng thử lại sau.");

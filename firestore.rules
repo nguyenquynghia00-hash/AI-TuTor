@@ -102,5 +102,10 @@ service cloud.firestore {
                      (resource.data.user2Id == request.auth.uid || resource.data.user1Id == request.auth.uid));
       allow delete: if isAuthenticated() && (resource.data.user1Id == request.auth.uid || resource.data.user2Id == request.auth.uid);
     }
+
+    match /author_profile/{docId} {
+      allow read: if true;
+      allow write: if isAuthenticated() && request.auth.token.email == "nguyenquynghia00@gmail.com";
+    }
   }
 }

@@ -12,6 +12,8 @@ import remarkGfm from 'remark-gfm';
 import { auth } from './firebase';
 import ExamGenerator from './components/ExamGenerator';
 import StudyRoadmap from './components/StudyRoadmap';
+import FlashcardApp from './components/FlashcardApp';
+import AboutAuthor from './components/AboutAuthor';
 import { 
   signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User as FirebaseUser,
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile
@@ -149,7 +151,7 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentSubject, setCurrentSubject] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'chat' | 'exam' | 'roadmap'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'chat' | 'exam' | 'roadmap' | 'flashcard' | 'about'>('dashboard');
   const [chats, setChats] = useState<Record<string, Message[]>>({});
   const [inputValue, setInputValue] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -337,7 +339,7 @@ Lưu ý theo môn học:
   };
 
   useEffect(() => {
-    aiRef.current = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    aiRef.current = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || 'dummy_key_to_prevent_crash' });
     
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -824,7 +826,7 @@ Lưu ý theo môn học:
 
   if (!isAuthReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+      <div className="h-[100dvh] flex items-center justify-center bg-slate-50 dark:bg-slate-900">
         <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
@@ -832,7 +834,7 @@ Lưu ý theo môn học:
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-slate-800 dark:text-slate-100 font-sans relative overflow-hidden">
+      <div className="h-[100dvh] flex items-center justify-center text-slate-800 dark:text-slate-100 font-sans relative overflow-hidden">
         {/* Background Video */}
         <div className="fixed inset-0 z-[-2] overflow-hidden pointer-events-none">
           <video
@@ -963,7 +965,7 @@ Lưu ý theo môn học:
   }
 
   return (
-    <div className="min-h-screen flex text-slate-800 dark:text-slate-100 font-sans overflow-hidden relative">
+    <div className="h-[100dvh] flex text-slate-800 dark:text-slate-100 font-sans overflow-hidden relative">
       {/* Background Video */}
       <div className="fixed inset-0 z-[-2] overflow-hidden pointer-events-none">
         <video
@@ -1237,9 +1239,12 @@ Lưu ý theo môn học:
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-105 transition-transform">
               <Sparkles className="text-white" size={20} />
             </div>
-            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">
-              Learning Hub
-            </h1>
+            <div>
+              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">
+                Learning Hub
+              </h1>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Phát triển bởi leader Nguyễn Quý Nghĩa</p>
+            </div>
           </div>
           <button onClick={() => setSidebarOpen(false)} className="md:hidden p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
             <X size={20} />
@@ -1274,6 +1279,24 @@ Lưu ý theo môn học:
                 <Target size={18} />
               </div>
               <span className={`font-medium ${currentView === 'roadmap' ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>Lộ Trình Học Tập</span>
+            </button>
+            <button
+              onClick={() => { setCurrentSubject(null); setCurrentView('flashcard'); setSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${currentView === 'flashcard' ? 'bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700' : 'hover:bg-white/50 dark:hover:bg-slate-800/50 border border-transparent'}`}
+            >
+              <div className={`p-1.5 rounded-lg bg-amber-100 dark:bg-amber-500/20 text-amber-500`}>
+                <BookOpen size={18} />
+              </div>
+              <span className={`font-medium ${currentView === 'flashcard' ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>Flashcard</span>
+            </button>
+            <button
+              onClick={() => { setCurrentSubject(null); setCurrentView('about'); setSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${currentView === 'about' ? 'bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700' : 'hover:bg-white/50 dark:hover:bg-slate-800/50 border border-transparent'}`}
+            >
+              <div className={`p-1.5 rounded-lg bg-pink-100 dark:bg-pink-500/20 text-pink-500`}>
+                <User size={18} />
+              </div>
+              <span className={`font-medium ${currentView === 'about' ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>Về Tác Giả</span>
             </button>
           </div>
 
@@ -1311,7 +1334,7 @@ Lưu ý theo môn học:
       </motion.aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col h-screen relative w-full">
+      <div className="flex-1 flex flex-col h-[100dvh] relative w-full">
         {/* Top Bar */}
         <header className="h-16 glass-panel border-b border-white/40 dark:border-slate-700/50 flex items-center justify-between px-4 sticky top-0 z-30">
           <div className="flex items-center gap-3">
@@ -1339,6 +1362,16 @@ Lưu ý theo môn học:
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 dark:bg-slate-800/50 border border-white/60 dark:border-slate-700/50 shadow-sm">
                   <Target size={16} className="text-emerald-500" />
                   <span className="text-sm font-medium">Lộ Trình Học Tập</span>
+                </div>
+              ) : currentView === 'flashcard' ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 dark:bg-slate-800/50 border border-white/60 dark:border-slate-700/50 shadow-sm">
+                  <BookOpen size={16} className="text-amber-500" />
+                  <span className="text-sm font-medium">Flashcard</span>
+                </div>
+              ) : currentView === 'about' ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 dark:bg-slate-800/50 border border-white/60 dark:border-slate-700/50 shadow-sm">
+                  <User size={16} className="text-pink-500" />
+                  <span className="text-sm font-medium">Về Tác Giả</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 dark:bg-slate-800/50 border border-white/60 dark:border-slate-700/50 shadow-sm">
@@ -1457,6 +1490,16 @@ Lưu ý theo môn học:
             {/* Study Roadmap View */}
             {currentView === 'roadmap' && aiRef.current && (
               <StudyRoadmap ai={aiRef.current} userProfile={userProfile} />
+            )}
+
+            {/* Flashcard View */}
+            {currentView === 'flashcard' && (
+              <FlashcardApp />
+            )}
+
+            {/* About Author View */}
+            {currentView === 'about' && (
+              <AboutAuthor />
             )}
 
             {/* Chat View */}
@@ -1723,6 +1766,18 @@ Lưu ý theo môn học:
             </p>
           </div>
         </div>
+        )}
+
+        {/* Footer */}
+        {currentView !== 'chat' && (
+          <footer className="w-full py-6 mt-auto border-t border-slate-200 dark:border-slate-800 text-center text-sm text-slate-500 dark:text-slate-400">
+            <p>Phát triển bởi leader Nguyễn Quý Nghĩa</p>
+            <p className="mt-1">
+              Zalo: <a href="https://zalo.me/0364975058" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline">0364975058</a> | 
+              Email: <a href="mailto:nguyenquynghia00@gmail.com" className="text-indigo-500 hover:underline">nguyenquynghia00@gmail.com</a>
+            </p>
+            <p className="mt-3 text-xs opacity-70">© 2026 Learning Hub. Powered by Nguyễn Quý Nghĩa.</p>
+          </footer>
         )}
       </div>
 

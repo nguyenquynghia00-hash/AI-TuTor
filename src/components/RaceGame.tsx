@@ -61,7 +61,7 @@ export const RaceGame = ({ onExit, settings }: RaceGameProps) => {
     setFeedback(null);
     setSelectedOption(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || 'dummy_key_to_prevent_crash' });
       const subject = settings?.subject || 'Kiến thức chung';
       const topic = settings?.topic || 'Tổng hợp';
       const difficulty = settings?.difficulty || 'Trung bình';
@@ -80,7 +80,7 @@ YÊU CẦU:
 4. Không dùng ký hiệu LaTeX. Viết rõ ràng như sách giáo khoa.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-preview',
+        model: 'gemini-3-flash-preview',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',

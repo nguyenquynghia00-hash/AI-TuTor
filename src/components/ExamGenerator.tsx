@@ -3,7 +3,8 @@ import { motion } from 'motion/react';
 import { FileText, Download, CheckCircle, Loader2, Eye, EyeOff, Play, Upload, X } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Header, Footer, PageBreak, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx';
-import { saveAs } from 'file-saver';
+import fileSaver from 'file-saver';
+const { saveAs } = fileSaver;
 
 interface ExamGeneratorProps {
   ai: GoogleGenAI;
